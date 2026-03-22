@@ -1,0 +1,4 @@
+rela_pos: [5, 0]
+# image_path: "../../../Depth-Anything-V2/images/map_forward/"
+# image_path: "./"
+image_path: "../topomaps/images/collision_forward/"

@@ -1,0 +1,3 @@
+strnetnew:
+  config_path: "../model_weights/strnet/strnet.yaml"
+  ckpt_path: "../model_weights/strnet/strnet.pth"
