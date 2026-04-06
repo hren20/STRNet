@@ -1,6 +1,7 @@
 # STRNet: Visual Navigation with Spatio-Temporal Representation through Dynamic Graph Aggregation
 
 > Accepted at **CVPR 2026**
+> [Github](https://github.com/hren20/STRNet) | [arXiv](https://arxiv.org/pdf/2604.02829)
 
 [Hao Ren](https://hren20.github.io)<sup>1,2</sup>,
 [Zetong Bi](https://scholar.google.com/citations?hl=zh-CN&user=JJutrU4AAAAJ)<sup>1</sup>,
@@ -120,7 +121,7 @@ For custom configurations, start from files in [train/config](train/config).
 
 ### 1. Prepare Model Weights
 
-Place the weight and config files:
+You could download the files in [this link](https://drive.google.com/drive/folders/15-gHV-_iX2EVofez5-WDZNEypE0aUIFC?usp=drive_link). Place the weight and config files:
 ```
 deployment/model_weights/strnet/strnet.pth
 deployment/model_weights/strnet/strnet.yaml
@@ -144,7 +145,7 @@ deployment/topomaps/images/<topomap_name>/
 ### 3. Run Navigation
 
 ```bash
-./navigate_new.sh "--model <model_name> --dir <topomap_dir>"
+./navigate.sh "--model <model_name> --dir <topomap_dir>"
 ```
 
 Where:

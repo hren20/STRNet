@@ -39,8 +39,8 @@ down_dims: [64, 128, 256]
 temporal_method: "stgcn"
 
 # stgcn
-gnn_layers: 2                    # 🚀时空图卷积层数
-K_list: [8,4,2,1]                # 🚀多尺度邻接参数（从粗到细）
+gnn_layers: 2
+K_list: [8,4,2,1]
 
 # diffusion model params
 num_diffusion_iters: 10
