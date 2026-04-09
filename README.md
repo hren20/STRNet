@@ -1,7 +1,7 @@
 <div align="center">
 
 # STRNet: Visual Navigation with Spatio-Temporal Representation through Dynamic Graph Aggregation
-<a href="https://arxiv.org/pdf/2604.02829"><img src="https://img.shields.io/badge/arXiv-2503.11651-b31b1b" alt="arXiv"></a>
+<a href="https://arxiv.org/pdf/2604.02829"><img src="https://img.shields.io/badge/arXiv-2604.02829-b31b1b" alt="arXiv"></a>
 <a href="https://github.com/hren20/STRNet"><img src="https://img.shields.io/badge/GitHub-STRNet-black?logo=github" alt="GitHub Code"></a>
 
 CVPR 2026 &#10024; Highlight
