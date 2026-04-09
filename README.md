@@ -1,7 +1,10 @@
-# STRNet: Visual Navigation with Spatio-Temporal Representation through Dynamic Graph Aggregation
+<div align="center">
 
-> Accepted at **CVPR 2026**
-> [Github](https://github.com/hren20/STRNet) | [arXiv](https://arxiv.org/pdf/2604.02829)
+# STRNet: Visual Navigation with Spatio-Temporal Representation through Dynamic Graph Aggregation
+<a href="https://arxiv.org/pdf/2604.02829"><img src="https://img.shields.io/badge/arXiv-2503.11651-b31b1b" alt="arXiv"></a>
+<a href="https://github.com/hren20/STRNet"><img src="https://img.shields.io/badge/GitHub-STRNet-black?logo=github" alt="GitHub Code"></a>
+
+CVPR 2026 &#10024; Highlight
 
 [Hao Ren](https://hren20.github.io)<sup>1,2</sup>,
 [Zetong Bi](https://scholar.google.com/citations?hl=zh-CN&user=JJutrU4AAAAJ)<sup>1</sup>,
@@ -14,11 +17,13 @@
 <sup>2</sup>Insta360 Research,
 <sup>3</sup>Wuhan University
 
+</div>
+
 ---
 
 ## TLDR
 
-STRNet provides a full pipeline for visual navigation with topological maps, covering dataset preparation, model training, and ROS-based deployment on mobile robots.
+STRNet provides better visual representations in robotic navigation by treating the environment as a dynamic graph, capturing the fine-grained spatial and temporal cues that simple encoders often miss. This repository provides a full pipeline for visual navigation with topological maps, covering dataset preparation, model training, and ROS-based deployment on mobile robots.
 
 ---
 
@@ -166,4 +171,4 @@ This project is released under the [MIT License](LICENSE).
 
 ## Acknowledgment
 
-STRNet is inspired by the contributions of the following works to the open-source community: [NoMaD](https://github.com/robodhruv/visualnav-transformer), and [GreedyViG](https://github.com/SLDGroup/GreedyViG). We thank the authors for sharing their outstanding work.
+STRNet is inspired by the contributions of the following works to the open-source community: [NoMaD](https://github.com/robodhruv/visualnav-transformer), [GreedyViG](https://github.com/SLDGroup/GreedyViG), [TSM](https://github.com/mit-han-lab/temporal-shift-module) and [NaviBridger](https://github.com/hren20/NaiviBridger). We thank the authors for sharing their outstanding work.
