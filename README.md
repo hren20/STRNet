@@ -169,6 +169,18 @@ The deployment stack assumes a ROS-based mobile robot with RGB camera input. Adj
 
 This project is released under the [MIT License](LICENSE).
 
+
+## Citation
+
+```bibtex
+@article{ren2026strnet,
+  title={STRNet: Visual Navigation with Spatio-Temporal Representation through Dynamic Graph Aggregation},
+  author={Ren, Hao and Bi, Zetong and Zeng, Yiming and Wan, Zhaoliang and Qi, Lu and Cheng, Hui},
+  journal={arXiv preprint arXiv:2604.02829},
+  year={2026}
+}
+```
+
 ## Acknowledgment
 
 STRNet is inspired by the contributions of the following works to the open-source community: [NoMaD](https://github.com/robodhruv/visualnav-transformer), [GreedyViG](https://github.com/SLDGroup/GreedyViG), [TSM](https://github.com/mit-han-lab/temporal-shift-module) and [NaviBridger](https://github.com/hren20/NaiviBridger). We thank the authors for sharing their outstanding work.
