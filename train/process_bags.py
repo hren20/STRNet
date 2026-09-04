@@ -1,22 +1,56 @@
 
 import os
 import pickle
-from PIL import Image
-import io
 import argparse
 import tqdm
 import yaml
 import rosbag
+from pathlib import Path
 
 # utils
-from vint_train.process_data.process_data_utils import *
+from vint_train.process_data.process_data_utils import (
+    filter_backwards,
+    get_images_and_odom,
+    nav_to_xy_yaw,
+    process_locobot_img,
+    process_sacson_img,
+    process_scand_img,
+    process_tartan_img,
+)
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+DEFAULT_CONFIG_PATH = os.path.join(SCRIPT_DIR, "vint_train", "process_data", "process_bags_config.yaml")
+DEFAULT_OUTPUT_DIR = os.path.join(SCRIPT_DIR, "datasets", "tartan_drive")
+
+IMAGE_PROCESSORS = {
+    "process_tartan_img": process_tartan_img,
+    "process_scand_img": process_scand_img,
+    "process_locobot_img": process_locobot_img,
+    "process_sacson_img": process_sacson_img,
+}
+
+ODOM_PROCESSORS = {
+    "nav_to_xy_yaw": nav_to_xy_yaw,
+}
+
+
+def get_processor(registry, name: str, kind: str):
+    try:
+        return registry[name]
+    except KeyError as exc:
+        available = ", ".join(sorted(registry))
+        raise ValueError(f"Unknown {kind} processor '{name}'. Available: {available}") from exc
 
 
 def main(args: argparse.Namespace):
 
     # load the config file
-    with open("vint_train/process_data/process_bags_config.yaml", "r") as f:
+    with open(args.config_path, "r") as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
+    if args.dataset_name not in config:
+        available = ", ".join(sorted(config))
+        raise ValueError(f"Unknown dataset '{args.dataset_name}'. Available: {available}")
+    dataset_config = config[args.dataset_name]
 
     # create output dir if it doesn't exist
     if not os.path.exists(args.output_dir):
@@ -24,10 +58,11 @@ def main(args: argparse.Namespace):
 
     # iterate recurisively through all the folders and get the path of files with .bag extension in the args.input_dir
     bag_files = []
-    for root, dirs, files in os.walk(args.input_dir):
+    for root, _dirs, files in os.walk(args.input_dir):
         for file in files:
             if file.endswith(".bag"):
                 bag_files.append(os.path.join(root, file))
+    bag_files.sort()
     if args.num_trajs >= 0:
         bag_files = bag_files[: args.num_trajs]
 
@@ -41,18 +76,22 @@ def main(args: argparse.Namespace):
             continue
 
         # name is that folders separated by _ and then the last part of the path
-        traj_name = "_".join(bag_path.split("/")[-2:])[:-4]
+        bag_path_obj = Path(bag_path)
+        traj_name = f"{bag_path_obj.parent.name}_{bag_path_obj.stem}"
 
-        # load the hdf5 file
-        bag_img_data, bag_traj_data = get_images_and_odom(
-            b,
-            config[args.dataset_name]["imtopics"],
-            config[args.dataset_name]["odomtopics"],
-            eval(config[args.dataset_name]["img_process_func"]),
-            eval(config[args.dataset_name]["odom_process_func"]),
-            rate=args.sample_rate,
-            ang_offset=config[args.dataset_name]["ang_offset"],
-        )
+        try:
+            # load the bag data
+            bag_img_data, bag_traj_data = get_images_and_odom(
+                b,
+                dataset_config["imtopics"],
+                dataset_config["odomtopics"],
+                get_processor(IMAGE_PROCESSORS, dataset_config["img_process_func"], "image"),
+                get_processor(ODOM_PROCESSORS, dataset_config["odom_process_func"], "odometry"),
+                rate=args.sample_rate,
+                ang_offset=dataset_config["ang_offset"],
+            )
+        finally:
+            b.close()
 
   
         if bag_img_data is None or bag_traj_data is None:
@@ -86,7 +125,13 @@ if __name__ == "__main__":
         type=str,
         help="name of the dataset (must be in process_config.yaml)",
         default="tartan_drive",
-        required=True,
+    )
+    parser.add_argument(
+        "--config-path",
+        "-c",
+        default=DEFAULT_CONFIG_PATH,
+        type=str,
+        help="path to process_bags_config.yaml",
     )
     parser.add_argument(
         "--input-dir",
@@ -98,9 +143,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--output-dir",
         "-o",
-        default="../datasets/tartan_drive/",
+        default=DEFAULT_OUTPUT_DIR,
         type=str,
-        help="path for processed dataset (default: ../datasets/tartan_drive/)",
+        help="path for processed dataset",
     )
     # number of trajs to process
     parser.add_argument(

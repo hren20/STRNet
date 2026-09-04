@@ -1,5 +1,5 @@
 subscribers:
-  - name:        "gnm vels"
+  - name:        "strnet vels"
     topic:       "/cmd_vel_mux/input/navi"
     timeout:     0.1
     priority:    0
@@ -9,9 +9,8 @@ subscribers:
     timeout:     0.5
     priority:    2
     short_desc:  "Navigation stack controller"
-  - name:       "gnm recovery"
+  - name:       "strnet recovery"
     topic:       "/cmd_vel_mux/input/recovery"
     timeout:     0.1
     priority:    1
 publisher:       "/mobile_base/commands/velocity"
-       

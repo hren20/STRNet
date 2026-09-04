@@ -88,8 +88,9 @@ pip install -e diffusion_policy/
 
 2. Run preprocessing:
    ```bash
-   python train/process_recon.py  # or process_bags.py
-   python train/data_split.py --dataset <your_dataset_path>
+   python train/process_recon.py --input-dir <recon_dataset_root>
+   python train/process_bags.py --input-dir <rosbag_root> --dataset-name <dataset_name>
+   python train/data_split.py --dataset <processed_dataset_path> --dataset-name <dataset_name>
    ```
 
 3. Expected data format:
@@ -103,7 +104,7 @@ dataset_name/
 
 4. Data split output:
 ```
-train/vint_train/data/data_splits/
+train/datasets/data_splits/
 └── <dataset_name>/
     ├── train/traj_names.txt
     └── test/traj_names.txt

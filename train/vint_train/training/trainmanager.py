@@ -8,7 +8,7 @@ from prettytable import PrettyTable
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
-from diffusers.training_utils import EMAModel
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from typing import *
 import inspect
@@ -168,7 +168,6 @@ class UniversalTrainingStrategy(TrainingStrategy):
     
     def __init__(self, context):
         super().__init__(context)
-        self._init_components()
         self.trainer = self._init_trainer()
 
     def _init_components(self):
@@ -195,26 +194,18 @@ class UniversalTrainingStrategy(TrainingStrategy):
     def _get_trainer_class(self, model_type: str) -> Type[BaseTrainer]:
         """自动化匹配Trainer类"""
         target_name = f"{model_type}Trainer".lower()
-        
-        try:
-            # 遍历所有BaseTrainer子类
-            for cls in BaseTrainer.__subclasses__():
-                cls_name = cls.__name__.lower()
-                
-                if cls_name == target_name or \
-                cls_name.replace("_", "") == target_name:
-                    trainer_cls = cls
-                    break
-        except:
-            # 未找到时显示可用类列表
-            available = [c.__name__ for c in BaseTrainer.__subclasses__()]
-            raise ValueError(
-                f"No trainer found for '{model_type}'. "
-                f"Available trainers: {available}\n"
-                f"Naming rule: {{model_type}}Trainer (case-insensitive)"
-            )
 
-        return trainer_cls
+        for cls in BaseTrainer.__subclasses__():
+            cls_name = cls.__name__.lower()
+            if cls_name == target_name or cls_name.replace("_", "") == target_name:
+                return cls
+
+        available = [c.__name__ for c in BaseTrainer.__subclasses__()]
+        raise ValueError(
+            f"No trainer found for '{model_type}'. "
+            f"Available trainers: {available}\n"
+            f"Naming rule: {{model_type}}Trainer (case-insensitive)"
+        )
 
     def _bind_components(self):
         """将上下文组件绑定到Trainer"""
@@ -271,7 +262,7 @@ class UniversalTrainingStrategy(TrainingStrategy):
     def _should_evaluate(self, epoch: int) -> bool:
         """智能判断评估条件"""
         eval_freq = self.ctx.params.get("eval_freq", 1)
-        return (epoch + 1) % eval_freq == 0
+        return eval_freq > 0 and (epoch + 1) % eval_freq == 0
 
 # --------------------------
 # 上下文管理
@@ -337,7 +328,7 @@ class TrainingContext:
         
         # 初始化策略系统
         self.strategy = UniversalTrainingStrategy(self)
-        self.model = self.strategy.trainer._create_model()
+        self.model = self.strategy.trainer.model
 
         self._init_logging_system()
 
@@ -385,11 +376,23 @@ class TrainingContext:
             self._update_learning_rate()
             
     def _should_evaluate(self, epoch: int) -> bool:
-        return (epoch + 1) % self.params["eval_freq"] == 0
+        eval_freq = self.params["eval_freq"]
+        return eval_freq > 0 and (epoch + 1) % eval_freq == 0
     
     def _update_learning_rate(self):
         """更新学习率"""
-        self.strategy.trainer.scheduler.step()
+        scheduler = self.strategy.trainer.scheduler
+        if scheduler is None:
+            return
+
+        if isinstance(scheduler, ReduceLROnPlateau):
+            logger = self.strategy.trainer.loggers.get("total_loss")
+            metric = logger.avg if logger is not None else None
+            if metric is None or np.isnan(metric):
+                return
+            scheduler.step(metric)
+        else:
+            scheduler.step()
 
     def get_all_variable_names(self) -> list:
         """获取实例所有成员变量名"""
@@ -408,10 +411,14 @@ class CheckpointManager:
     
     @staticmethod
     def save(model, path: str, ema_model=None, optimizer=None, scheduler=None, epoch=None):
+        os.makedirs(path, exist_ok=True)
+
         if ema_model is not None:
             numbered_path = os.path.join(path, f"ema_{epoch}.pth")
-            torch.save(ema_model.averaged_model.state_dict(), numbered_path)
-            numbered_path = os.path.join(path, f"ema_latest.pth")
+            latest_path = os.path.join(path, f"ema_latest.pth")
+            ema_state_dict = ema_model.averaged_model.state_dict()
+            torch.save(ema_state_dict, numbered_path)
+            torch.save(ema_state_dict, latest_path)
             print(f"Saved EMA model to {numbered_path}")
 
         latest_path = os.path.join(path, f"latest.pth")
@@ -421,14 +428,18 @@ class CheckpointManager:
         print(f"Saved model to {numbered_path}")
 
         # save optimizer
-        numbered_path = os.path.join(path, f"optimizer_{epoch}.pth")
-        latest_optimizer_path = os.path.join(path, f"optimizer_latest.pth")
-        torch.save(optimizer.state_dict(), latest_optimizer_path)
+        if optimizer is not None:
+            numbered_path = os.path.join(path, f"optimizer_{epoch}.pth")
+            latest_optimizer_path = os.path.join(path, f"optimizer_latest.pth")
+            torch.save(optimizer.state_dict(), numbered_path)
+            torch.save(optimizer.state_dict(), latest_optimizer_path)
 
         # save scheduler
-        numbered_path = os.path.join(path, f"scheduler_{epoch}.pth")
-        latest_scheduler_path = os.path.join(path, f"scheduler_latest.pth")
-        torch.save(scheduler.state_dict(), latest_scheduler_path)
+        if scheduler is not None:
+            numbered_path = os.path.join(path, f"scheduler_{epoch}.pth")
+            latest_scheduler_path = os.path.join(path, f"scheduler_latest.pth")
+            torch.save(scheduler.state_dict(), numbered_path)
+            torch.save(scheduler.state_dict(), latest_scheduler_path)
 
 # --------------------------
 # 对外接口
@@ -444,18 +455,10 @@ def training(params: TrainingParams):
 
 def load_model(model, model_type, checkpoint: dict) -> None:
     """加载模型（保持兼容）"""
-    if model_type in ["nomad", "navibridge"]:
-        if "model" in checkpoint:
-            model.load_state_dict(checkpoint['model'], strict=False)
-        else:
-            model.load_state_dict(checkpoint, strict=False)
-        if 'ema' in checkpoint:
-            EMAModel(model).load_state_dict(checkpoint['ema'])
+    if isinstance(checkpoint, dict) and "model" in checkpoint:
+        model.load_state_dict(checkpoint['model'], strict=False)
     else:
-        if "model" in checkpoint:
-            model.load_state_dict(checkpoint['model'], strict=False)
-        else:
-            model.load_state_dict(checkpoint, strict=False)
+        model.load_state_dict(checkpoint, strict=False)
 
 def count_parameters(model):
     table = PrettyTable(["Modules", "Parameters"])

@@ -10,13 +10,12 @@ from PIL import Image as PILImage
 from diffusers import DDPMScheduler
 
 # 复用训练框架组件
-from vint_train.training.trainer import *
-from vint_train.training.logger import Logger
-from vint_train.training.trainmanager import *
+from diffusion_policy.model.diffusion.ema_model import EMAModel
+from vint_train.training.trainer import STRNetNewTrainer
+from vint_train.training.trainmanager import load_model
 
-from utils_inference import transform_images
 from .inference_base import BaseInferenceTrainer
-from .common import to_numpy
+from .common import to_numpy, transform_images
 
 class InferenceSTRNetNewTrainer(STRNetNewTrainer, BaseInferenceTrainer):
     """扩展训练器支持推理功能"""
@@ -87,6 +86,7 @@ class InferenceSTRNetNewTrainer(STRNetNewTrainer, BaseInferenceTrainer):
         )
 
         # 迭代去噪
+        self.noise_scheduler.set_timesteps(int(self.config.get("num_diffusion_iters", 10)))
         for t in self.noise_scheduler.timesteps:
             noise_pred = model.noise_pred_net(
                 sample=noisy_actions,

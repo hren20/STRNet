@@ -1,4 +1,5 @@
 import numpy as np
+import os
 import yaml
 from typing import Tuple
 
@@ -10,17 +11,16 @@ from std_msgs.msg import Float32MultiArray, Bool
 from topic_names import (WAYPOINT_TOPIC, 
 			 			REACHED_GOAL_TOPIC)
 from ros_data import ROSData
-from utils import clip_angle
 
 # CONSTS
-CONFIG_PATH = "../config/robot_isaac.yaml"
+CONFIG_PATH = os.path.normpath(os.path.join(os.path.dirname(__file__), "../config/robot.yaml"))
 with open(CONFIG_PATH, "r") as f:
 	robot_config = yaml.safe_load(f)
 MAX_V = robot_config["max_v"]
 MAX_W = robot_config["max_w"]
 VEL_TOPIC = robot_config["vel_navi_topic"]
 DT = 1/robot_config["frame_rate"]
-RATE = 9
+RATE = robot_config["frame_rate"]
 EPS = 1e-8
 WAYPOINT_TIMEOUT = 1 # seconds # TODO: tune this
 FLIP_ANG_VEL = np.pi/4

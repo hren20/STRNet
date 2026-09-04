@@ -1,6 +1,6 @@
 # defaults for training
-project_name: vint
-run_name: vint
+project_name: strnetnew
+run_name: strnetnew
 
 # training setup
 use_wandb: True # set to false if you don't want to log to wandb
@@ -17,7 +17,7 @@ clipping: False
 train_subset: 1.
 
 # model params
-model_type: gnm
+model_type: strnetnew
 obs_encoding_size: 1024
 goal_encoding_size: 1024
 
@@ -63,4 +63,3 @@ pairwise_test_freq: 10 # in epochs
 eval_fraction: 0.25 # fraction of the dataset to use for evaluation
 wandb_log_freq: 10 # in iterations
 eval_freq: 1 # in epochs
-

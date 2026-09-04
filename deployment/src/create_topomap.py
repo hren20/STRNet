@@ -1,19 +1,18 @@
 import argparse
 import os
-from utils import msg_to_pil, find_images
+import shutil
 import time
+from utils import msg_to_pil
 
 # ROS
 import rospy
 from sensor_msgs.msg import Image
-from sensor_msgs.msg import Joy
-from message_filters import TimeSynchronizer, Subscriber
 from geometry_msgs.msg import PoseStamped
-from gazebo_msgs.msg import ModelStates
 
 from topic_names import (IMAGE_TOPIC,
                         POS_TOPIC,)
-TOPOMAP_IMAGES_DIR = "../topomaps/images"
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+TOPOMAP_IMAGES_DIR = os.path.normpath(os.path.join(SCRIPT_DIR, "../topomaps/images"))
 obs_img = None
 world_pos = None
 
@@ -34,28 +33,51 @@ def callback_obs(msg: Image):
     global obs_img
     obs_img = msg_to_pil(msg)
 
-
-def callback_syn(img, pos):
-    global obs_img, world_pos
-    obs_img = msg_to_pil(img)
-    world_pos = pos
-
-def call_back_pos(msg: ModelStates):
+def call_back_pos(msg):
     global world_pos
     world_pos = msg
 
-def callback_joy(msg: Joy):
-    if msg.buttons[0]:
-        rospy.signal_shutdown("shutdown")
+
+def pose_to_list(pose):
+    return [
+        pose.position.x,
+        pose.position.y,
+        pose.position.z,
+        pose.orientation.x,
+        pose.orientation.y,
+        pose.orientation.z,
+        pose.orientation.w,
+    ]
+
+
+def extract_position_sample(msg, args):
+    if args.pos_type == "pose_stamped":
+        return pose_to_list(msg.pose)
+
+    try:
+        index = msg.name.index(args.robot_name)
+    except ValueError:
+        rospy.logwarn_throttle(
+            5.0,
+            f"Robot '{args.robot_name}' not found in {args.pos_topic}; skipping position sample.",
+        )
+        return None
+    return pose_to_list(msg.pose[index])
 
 
 def main(args: argparse.Namespace):
     global obs_img, world_pos
     rospy.init_node("CREATE_TOPOMAP", anonymous=False)
     image_curr_msg = rospy.Subscriber(
-        IMAGE_TOPIC, Image, callback_obs, queue_size=1)
-    pos_curr_msg = rospy.Subscriber(
-        POS_TOPIC, ModelStates, call_back_pos, queue_size=1)
+        args.image_topic, Image, callback_obs, queue_size=1)
+    if args.pos:
+        if args.pos_type == "model_states":
+            from gazebo_msgs.msg import ModelStates
+            pos_msg_type = ModelStates
+        else:
+            pos_msg_type = PoseStamped
+        pos_curr_msg = rospy.Subscriber(
+            args.pos_topic, pos_msg_type, call_back_pos, queue_size=1)
 
     topomap_name_dir = os.path.join(TOPOMAP_IMAGES_DIR, args.dir)
     if not os.path.isdir(topomap_name_dir):
@@ -73,18 +95,31 @@ def main(args: argparse.Namespace):
     start_time = float("inf")
     while not rospy.is_shutdown():
         if obs_img is not None:
+            pos_sample = None
+            if args.pos:
+                if world_pos is None:
+                    rospy.logwarn_throttle(
+                        5.0,
+                        f"Waiting for pose samples from {args.pos_topic} before saving topomap frames.",
+                    )
+                    rate.sleep()
+                    continue
+                pos_sample = extract_position_sample(world_pos, args)
+                if pos_sample is not None:
+                    pos_list.append(pos_sample)
+                else:
+                    rate.sleep()
+                    continue
             obs_img.save(os.path.join(topomap_name_dir, f"{i}.png"))
-            if args.pos and world_pos is not None:
-                index = world_pos.name.index('jackal')
-                pos_list.append([world_pos.pose[index].position.x, world_pos.pose[index].position.y, world_pos.pose[index].position.z, \
-                                 world_pos.pose[index].orientation.x, world_pos.pose[index].orientation.y, world_pos.pose[index].orientation.z, world_pos.pose[index].orientation.w])
             print("published image", i)
             i += 1
             rate.sleep()
             start_time = time.time()
             obs_img = None
+        else:
+            rate.sleep()
         if time.time() - start_time > 2 * args.dt:
-            print(f"Topic {IMAGE_TOPIC} not publishing anymore. Shutting down...")
+            print(f"Topic {args.image_topic} not publishing anymore. Shutting down...")
             rospy.signal_shutdown("shutdown")
     if args.pos:
         print("world position is processing!")
@@ -96,7 +131,13 @@ def main(args: argparse.Namespace):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description=f"Code to generate topomaps from the {IMAGE_TOPIC} topic"
+        description=f"Code to generate topomaps from an image topic (default: {IMAGE_TOPIC})"
+    )
+    parser.add_argument(
+        "--image-topic",
+        default=IMAGE_TOPIC,
+        type=str,
+        help=f"image topic to sample (default: {IMAGE_TOPIC})",
     )
     parser.add_argument(
         "--dir",
@@ -110,21 +151,45 @@ if __name__ == "__main__":
         "-t",
         default=1.,
         type=float,
-        help=f"time between images sampled from the {IMAGE_TOPIC} topic (default: 3.0)",
+        help=f"time between sampled images (default: 1.0)",
     )
     parser.add_argument(
         "--seg",
         "-s",
-        default=False,
-        type=bool,
+        action="store_true",
         help=f"segmentation flag",
     )
     parser.add_argument(
         "--pos",
         "-p",
-        default=True,
-        type=bool,
-        help=f"pos flag",
+        dest="pos",
+        action="store_true",
+        help=f"save robot poses from a pose topic (default topic: {POS_TOPIC})",
+    )
+    parser.add_argument(
+        "--no-pos",
+        dest="pos",
+        action="store_false",
+        help="do not save robot poses",
+    )
+    parser.set_defaults(pos=False)
+    parser.add_argument(
+        "--pos-topic",
+        default=POS_TOPIC,
+        type=str,
+        help=f"pose topic to save with --pos (default: {POS_TOPIC})",
+    )
+    parser.add_argument(
+        "--pos-type",
+        choices=("pose_stamped", "model_states"),
+        default="pose_stamped",
+        help="message type for --pos-topic (default: pose_stamped)",
+    )
+    parser.add_argument(
+        "--robot-name",
+        default="jackal",
+        type=str,
+        help="robot model name when --pos-type model_states is used (default: jackal)",
     )
     args = parser.parse_args()
 

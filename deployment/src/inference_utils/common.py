@@ -1,3 +1,4 @@
+import os
 import yaml, torch
 from sensor_msgs.msg import Image
 from PIL import Image as PILImage
@@ -8,6 +9,7 @@ from geometry_msgs.msg import Point
 import rospy
 import numpy as np
 from typing import List, Sequence, Tuple
+import cv2
 
 from torchvision import transforms
 import torchvision.transforms.functional as TF
@@ -85,18 +87,49 @@ def rotate_point_by_quaternion(point, quaternion):
     return rotated_point
 
 def msg_to_pil(msg: Image) -> PILImage.Image:
-    img = np.frombuffer(msg.data, dtype=np.uint8).reshape(
-        msg.height, msg.width, -1)
-    pil_image = PILImage.fromarray(img)
-    return pil_image
+    encoding = getattr(msg, "encoding", "rgb8").lower()
+    channels = max(int(getattr(msg, "step", 0) / msg.width), 1) if msg.width else 3
+    img = np.frombuffer(msg.data, dtype=np.uint8).reshape(msg.height, msg.width, channels)
+
+    if encoding in {"rgb8", "8uc3"}:
+        rgb = img[:, :, :3]
+    elif encoding == "bgr8":
+        rgb = cv2.cvtColor(img[:, :, :3], cv2.COLOR_BGR2RGB)
+    elif encoding == "rgba8":
+        rgb = cv2.cvtColor(img, cv2.COLOR_RGBA2RGB)
+    elif encoding == "bgra8":
+        rgb = cv2.cvtColor(img, cv2.COLOR_BGRA2RGB)
+    elif encoding in {"mono8", "8uc1"}:
+        rgb = cv2.cvtColor(img[:, :, 0], cv2.COLOR_GRAY2RGB)
+    elif encoding in {"yuyv", "yuyv422", "yuv422"}:
+        rgb = cv2.cvtColor(img[:, :, :2], cv2.COLOR_YUV2RGB_YUY2)
+    else:
+        rgb = img[:, :, :3] if channels >= 3 else cv2.cvtColor(img[:, :, 0], cv2.COLOR_GRAY2RGB)
+
+    return PILImage.fromarray(rgb).convert("RGB")
+
+def _resolve_path(path: str, base_dir: str) -> str:
+    if os.path.isabs(path):
+        return path
+    return os.path.normpath(os.path.join(base_dir, path))
+
 
 def load_config(model_key: str, config_path: str):
+    config_path = _resolve_path(config_path, os.getcwd())
+    config_dir = os.path.dirname(config_path)
     with open(config_path, "r") as f:
         full_config = yaml.safe_load(f)
+    if model_key not in full_config:
+        available = ", ".join(sorted(full_config.keys()))
+        raise KeyError(f"Unknown model '{model_key}'. Available models: {available}")
     model_info = full_config[model_key]
-    with open(model_info["config_path"], "r") as f:
+    model_config_path = _resolve_path(model_info["config_path"], config_dir)
+    ckpt_path = _resolve_path(model_info["ckpt_path"], config_dir)
+    with open(model_config_path, "r") as f:
         model_config = yaml.safe_load(f)
-    return model_config, model_info["ckpt_path"]
+    if not os.path.exists(ckpt_path):
+        raise FileNotFoundError(f"Checkpoint not found: {ckpt_path}")
+    return model_config, ckpt_path
 
 def load_images(context_size, folder_path, image_size) -> List[str]:
     return [f"{folder_path}/{i}.png" for i in range(context_size)]

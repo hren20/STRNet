@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Create a new tmux session
-session_name="gnm_locobot_$(date +%s)"
+session_name="strnet_topomap_$(date +%s)"
 tmux new-session -d -s $session_name
 
 # Split the window into three panes
@@ -17,13 +17,13 @@ tmux send-keys "roscore" Enter
 # Run the create_topoplan.py script with command line args in the second pane
 tmux select-pane -t 1
 tmux send-keys "conda activate strnet" Enter
-tmux send-keys "python create_topomap.py --dt 1 --dir $1" Enter
+tmux send-keys "python create_topomap.py --dt 1 --dir \"$1\"" Enter
 
 # Change the directory to ../topomaps/bags and run the rosbag play command in the third pane
 tmux select-pane -t 2
 tmux send-keys "mkdir -p ../topomaps/bags" Enter
 tmux send-keys "cd ../topomaps/bags" Enter
-tmux send-keys "rosbag play -r 2 $2" # feel free to change the playback rate to change the edge length in the graph
+tmux send-keys "rosbag play -r 2 \"$2\"" Enter # feel free to change the playback rate to change the edge length in the graph
 
 # Attach to the tmux session
 tmux -2 attach-session -t $session_name

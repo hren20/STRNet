@@ -4,6 +4,10 @@ import shutil
 import random
 
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+DEFAULT_DATA_SPLITS_DIR = os.path.join(SCRIPT_DIR, "datasets", "data_splits")
+
+
 def remove_files_in_dir(dir_path: str):
     for f in os.listdir(dir_path):
         file_path = os.path.join(dir_path, f)
@@ -17,6 +21,13 @@ def remove_files_in_dir(dir_path: str):
 
 
 def main(args: argparse.Namespace):
+    if not os.path.isdir(args.data_dir):
+        raise FileNotFoundError(f"Data directory not found: {args.data_dir}")
+    if not 0.0 < args.split < 1.0:
+        raise ValueError(f"--split must be between 0 and 1, got {args.split}")
+    if args.seed is not None:
+        random.seed(args.seed)
+
     # Get the names of the folders in the data directory that contain the file 'traj_data.pkl'
     folder_names = [
         f
@@ -59,7 +70,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        "--data-dir", "-i", help="Directory containing the data", required=True
+        "--data-dir", "--dataset", "-i", help="Directory containing the data", required=True
     )
     parser.add_argument(
         "--dataset-name", "-d", help="Name of the dataset", required=True
@@ -68,7 +79,10 @@ if __name__ == "__main__":
         "--split", "-s", type=float, default=0.8, help="Train/test split (default: 0.8)"
     )
     parser.add_argument(
-        "--data-splits-dir", "-o", default="vint_train/data/data_splits", help="Data splits directory"
+        "--data-splits-dir", "-o", default=DEFAULT_DATA_SPLITS_DIR, help="Data splits directory"
+    )
+    parser.add_argument(
+        "--seed", type=int, default=None, help="Optional random seed for reproducible splits"
     )
     args = parser.parse_args()
     main(args)

@@ -22,6 +22,7 @@ dependencies:
   - roslz4
   - prettytable
   - efficientnet-pytorch
+  - einops==0.4.1
   - warmup-scheduler
   - diffusers==0.11.1
   - lmdb 

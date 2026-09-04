@@ -112,7 +112,8 @@ class LogRouter:
 
     def log_images(self, images: dict, step: int):
         """路由图像数据"""
-        if step % self.config['image_log_freq'] == 0:
+        image_log_freq = self.config['image_log_freq']
+        if image_log_freq > 0 and step % image_log_freq == 0:
             for channel in self.channels:
                 if isinstance(channel, ImageLogger):
                     channel.log_images(images, step)

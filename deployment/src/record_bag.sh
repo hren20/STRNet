@@ -21,8 +21,9 @@ tmux send-keys "python joy_teleop.py" Enter
 
 # Change the directory to ../topomaps/bags and run the rosbag record command in the third pane
 tmux select-pane -t 2
+tmux send-keys "mkdir -p ../topomaps/bags" Enter
 tmux send-keys "cd ../topomaps/bags" Enter
-tmux send-keys "rosbag record /usb_cam/image_raw -o $1" # change topic if necessary
+tmux send-keys "rosbag record /usb_cam/image_raw -o \"$1\"" Enter # change topic if necessary
 
 # Attach to the tmux session
 tmux -2 attach-session -t $session_name

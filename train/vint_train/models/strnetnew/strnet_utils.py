@@ -300,6 +300,7 @@ class TSMModule(nn.Module):
         x_shifted[:, :-1, self.channel_split[0]:sum(self.channel_split[:2])] = split_chs[1][:, 1:]
         x_shifted[:, 1:-1, sum(self.channel_split[:2]):sum(self.channel_split[:3])] = \
             (split_chs[2][:, :-2] + split_chs[2][:, 2:]) / 2
+        x_shifted[:, :, sum(self.channel_split[:3]):] = split_chs[3]
         
         fused = self.temporal_fusion(x_shifted.permute(0,2,1,3,4))
         return x + fused.permute(0,2,1,3,4)

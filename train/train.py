@@ -15,6 +15,17 @@ from vint_train.data.vint_dataset import ViNT_Dataset
 
 from vint_train.training.trainmanager import training, TrainingParams
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+def resolve_path(path: str, base_dir: str) -> str:
+    if os.path.isabs(path):
+        return path
+    cwd_path = os.path.normpath(os.path.join(base_dir, path))
+    if os.path.exists(cwd_path):
+        return cwd_path
+    return os.path.normpath(os.path.join(SCRIPT_DIR, path))
+
 def main(config):
     assert config["distance"]["min_dist_cat"] < config["distance"]["max_dist_cat"]
     assert config["action"]["min_dist_cat"] < config["action"]["max_dist_cat"]
@@ -117,7 +128,7 @@ def main(config):
         shuffle=True,
         num_workers=config["num_workers"],
         drop_last=False,
-        persistent_workers=True,
+        persistent_workers=config["num_workers"] > 0,
     )
 
     if "eval_batch_size" not in config:
@@ -138,9 +149,7 @@ def main(config):
         test_dataloaders=test_dataloaders,
         transform=transform,
         device=device,
-        current_epoch=current_epoch,
-        noise_scheduler = locals().get("noise_scheduler", None),
-        diffusion=diffusion if config.get("model_type") == "navibridge" else None,
+        current_epoch=config.get("current_epoch", 0),
         alpha=float(config["alpha"]) if config.get("alpha") is not None else None,
     )
 
@@ -158,13 +167,15 @@ if __name__ == "__main__":
     parser.add_argument(
         "--config",
         "-c",
-        default="config/vint.yaml",
+        default=os.path.join(SCRIPT_DIR, "config", "strnetnew.yaml"),
         type=str,
         help="Path to the config file in train_config folder",
     )
     args = parser.parse_args()
+    args.config = resolve_path(args.config, os.getcwd())
+    os.chdir(SCRIPT_DIR)
 
-    with open("config/defaults.yaml", "r") as f:
+    with open(os.path.join(SCRIPT_DIR, "config", "defaults.yaml"), "r") as f:
         default_config = yaml.safe_load(f)
 
     config = default_config
@@ -178,10 +189,11 @@ if __name__ == "__main__":
     config["project_folder"] = os.path.join(
         "logs", config["project_name"], config["run_name"]
     )
-    os.makedirs(config["project_folder"])
+    os.makedirs(config["project_folder"], exist_ok=True)
 
     if config["use_wandb"]:
-        wandb.login()
+        if config.get("wandb_login", False):
+            wandb.login()
         wandb.init(
             project=config["project_name"],
             settings=wandb.Settings(start_method="fork"),

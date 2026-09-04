@@ -1,9 +1,6 @@
 import os
 import torch
-# import wandb
-# from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Tuple
-# from torch.utils.data import DataLoader
+from typing import Any, Dict
 from torch.optim import Adam, AdamW, SGD
 from torch.optim.lr_scheduler import (
     CosineAnnealingLR,
@@ -13,41 +10,24 @@ from torch.optim.lr_scheduler import (
 from warmup_scheduler import GradualWarmupScheduler
 
 import torch.nn.functional as F
-# import torchvision.transforms.functional as TF
-# from tqdm.auto import tqdm  # 自动适配Jupyter/终端环境
-# import yaml
 import numpy as np
 import matplotlib.pyplot as plt
 
-from vint_train.data.data_utils import VISUALIZATION_IMAGE_SIZE
 from vint_train.training.logger import Logger
 
 from vint_train.visualizing.action_utils import plot_trajs_and_points
-# from vint_train.visualizing.distance_utils import visualize_dist_pred
 from vint_train.visualizing.visualize_utils import to_numpy, from_numpy
 
-# from vint_train.models.gnm.gnm import GNM
-# from vint_train.models.vint.vint import ViNT
-from vint_train.models.vint.vit import ViT
-from vint_train.models.nomad.nomad import NoMaD, DenseNetwork
 from vint_train.models.strnetnew.strnetnew import STRNetNew, DenseNetwork
-# from vint_train.models.navibridge.navibridge import NaviBridge, DenseNetwork, StatesPredNet
-# from vint_train.models.navibridge.navibridg_utils import NaviBridge_Encoder, replace_bn_with_gn
 from diffusion_policy.model.diffusion.conditional_unet1d import ConditionalUnet1D
-from vint_train.models.nomad.nomad_vint import NoMaD_ViNT, replace_bn_with_gn
+from diffusion_policy.model.diffusion.ema_model import EMAModel
 from vint_train.models.strnetnew.strnet_utils import STRNetNew_Extractor
 from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
-from diffusers.training_utils import EMAModel
-
-# from vint_train.models.navibridge.ddbm.karras_diffusion import KarrasDenoiser
-# from vint_train.models.navibridge.ddbm.resample import create_named_schedule_sampler
-# from vint_train.models.navibridge.navibridge import PriorModel, Prior_HandCraft
-# from vint_train.models.navibridge.vae.vae import VAEModel
 
 from .base import BaseTrainer
 
 class STRNetNewTrainer(BaseTrainer):
-    """NoMaD扩散模型训练器实现"""
+    """STRNetNew扩散模型训练器实现"""
     
     def __init__(self, config: Dict[str, Any]):
         super().__init__(config)
@@ -93,7 +73,7 @@ class STRNetNewTrainer(BaseTrainer):
     def _create_noise_scheduler(self):
         """创建扩散噪声调度器"""
         return DDPMScheduler(
-            num_train_timesteps=self.config.get("num_diffusion_iters", 10),
+            num_train_timesteps=int(self.config.get("num_diffusion_iters", 10)),
             beta_schedule='squaredcos_cap_v2',
             clip_sample=True,
             prediction_type='epsilon'
@@ -141,44 +121,45 @@ class STRNetNewTrainer(BaseTrainer):
 
     def _create_scheduler(self, optimizer: torch.optim.Optimizer):
         """根据配置创建学习率调度器"""
-        scheduler_type = self.config.get("scheduler", "").lower()
-        if not scheduler_type:
-            return None
+        scheduler_type = (self.config.get("scheduler") or "").lower()
+        lr = float(self.config.get("lr", 1e-4))
 
-        # 基础调度器
         if scheduler_type == "cosine":
-            return CosineAnnealingLR(
+            base_scheduler = CosineAnnealingLR(
                 optimizer,
                 T_max=self.config.get("epochs", 100)
             )
         elif scheduler_type == "cyclic":
-            return CyclicLR(
+            base_scheduler = CyclicLR(
                 optimizer,
-                base_lr=self.config["lr"] / 10.0,
-                max_lr=self.config["lr"],
+                base_lr=lr / 10.0,
+                max_lr=lr,
                 step_size_up=self.config.get("cyclic_period", 50) // 2,
                 cycle_momentum=False
             )
         elif scheduler_type == "plateau":
-            return ReduceLROnPlateau(
+            base_scheduler = ReduceLROnPlateau(
                 optimizer,
                 factor=self.config.get("plateau_factor", 0.1),
                 patience=self.config.get("plateau_patience", 10),
                 verbose=True
             )
+        elif scheduler_type:
+            raise ValueError(f"Unsupported scheduler: {scheduler_type}")
+        else:
+            base_scheduler = None
         
-        # Warmup包装
         if self.config.get("warmup", False):
             return GradualWarmupScheduler(
                 optimizer,
                 multiplier=1,
                 total_epoch=self.config.get("warmup_epochs", 5),
-                after_scheduler=self._create_base_scheduler(optimizer)
+                after_scheduler=base_scheduler
             )
-        return None
+        return base_scheduler
 
     def _preprocess_batch(self, batch: tuple) -> tuple:
-        """NoMaD数据预处理"""
+        """STRNetNew数据预处理"""
         (obs_img, goal_img, actions, dist, goal_pos, _, action_mask, _) = batch
         
         # 图像处理
@@ -265,7 +246,8 @@ class STRNetNewTrainer(BaseTrainer):
         """扩散过程前向传播"""
 
         noise = torch.randn_like(naction)
-        timesteps = torch.randint(0, self.noise_scheduler.num_train_timesteps, (naction.size(0),), device=self.device)
+        num_train_timesteps = self.noise_scheduler.config.num_train_timesteps
+        timesteps = torch.randint(0, num_train_timesteps, (naction.size(0),), device=self.device)
         noisy_action = self.noise_scheduler.add_noise(naction, noise, timesteps)
 
         return noise, self.model.noise_pred_net(sample=noisy_action, timestep=timesteps, global_cond=obs_cond)
@@ -372,7 +354,7 @@ class STRNetNewTrainer(BaseTrainer):
             self.loggers[metric_name].log_data(losses[key].item())
 
     def _compute_additional_metrics(self, batch: tuple) -> dict:
-        """整合_compute_losses_nomad功能"""
+        """计算附加评估指标"""
         # 解包数据
         obs_tensor, goal_tensor, _, dist_label, action_mask, true_actions, _ = self._preprocess_batch(batch)
 
@@ -427,7 +409,6 @@ class STRNetNewTrainer(BaseTrainer):
         
         # 距离预测
         obsgoal_cond = model.vision_encoder(obs_images, goal_images)
-        obsgoal_cond.repeat_interleave(num_samples, dim=0)
         gc_distance = model.dist_pred_net(obsgoal_cond)
         
         return {
@@ -452,6 +433,8 @@ class STRNetNewTrainer(BaseTrainer):
             device=self.device
         )
 
+        self.noise_scheduler.set_timesteps(int(self.config.get("num_diffusion_iters", 10)))
+
         # 迭代去噪
         for t in self.noise_scheduler.timesteps:
             noise_pred = model.noise_pred_net(
@@ -474,7 +457,7 @@ class STRNetNewTrainer(BaseTrainer):
             return noisy_actions
 
     def _compute_eval_metrics(self, uc_actions, gc_actions, gc_dist, true_actions, dist_label, action_mask):
-        """实现_compute_losses_nomad功能"""
+        """计算STRNetNew评估指标"""
         def action_reduce(loss):
             while loss.dim() > 1:
                 loss = loss.mean(dim=-1)
@@ -624,7 +607,7 @@ class STRNetNewTrainer(BaseTrainer):
         gc_actions = self._get_action(gc_actions, self.ACTION_STATS)
 
         # 距离预测
-        obsgoal_cond = self.ema_model.averaged_model.vision_encoder(obs, goal)
+        obsgoal_cond = self.ema_model.averaged_model.vision_encoder(obs.to(self.device), goal.to(self.device))
         obsgoal_cond = obsgoal_cond.repeat_interleave(num_samples, dim=0)
         gc_distance = self.ema_model.averaged_model.dist_pred_net(obsgoal_cond)
 
@@ -721,8 +704,9 @@ class STRNetNewTrainer(BaseTrainer):
         """目标图像带统计信息"""
         # 计算预测统计量
 
-        pred_dist = np.linalg.norm(pred_actions[-1, :2], axis=0).mean()
-        std_dist = np.linalg.norm(pred_actions[-1, :2], axis=0).std()
+        pred_dists = np.asarray(pred_actions).reshape(-1)
+        pred_dist = pred_dists.mean()
+        std_dist = pred_dists.std()
         
         # 绘制图像
         if goal_img.shape[0] == 3:

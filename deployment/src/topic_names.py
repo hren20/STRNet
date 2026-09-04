@@ -1,8 +1,6 @@
 # topic names for ROS communication
-
-# 替换 topic_names.py 或直接在脚本中设置
-IMAGE_TOPIC = "/carla/ego_vehicle/rgb_front/image"
-POS_TOPIC = "/carla/ego_vehicle/odometry"
+IMAGE_TOPIC = "/usb_cam/image_raw"
+POS_TOPIC = "/model_position"
 
 
 # exploration topics

@@ -1,12 +1,12 @@
 <launch>
     <!-- Launch the camera -->
     <node name="usb_cam" pkg="usb_cam" type="usb_cam_node" output="screen" >
-        <rosparam file="../config/camera_front.yaml" command="load" />
+        <rosparam file="$(dirname)/../config/camera_front.yaml" command="load" />
     </node>
 
     <!-- Launch the joy stick node -->
     <node pkg="joy" type="joy_node" name="joy_node">
-         <rosparam file="../config/joystick.yaml" command="load" />
+         <rosparam file="$(dirname)/../config/joystick.yaml" command="load" />
     </node>
 
     <!-- Launch the locobot with only use_base -->
@@ -14,7 +14,7 @@
     
     <!-- velocity mulitplexer -->
     <arg name="nodelet_manager_name"  value="nodelet_manager"/>
-    <arg name="config_file"           value="/home/racecar/vint_release/gnm-v2/deployment/config/cmd_vel_mux.yaml"/>
+    <arg name="config_file"           value="$(dirname)/../config/cmd_vel_mux.yaml"/>
   
     <!-- nodelet manager -->
     <node pkg="nodelet" type="nodelet" name="$(arg nodelet_manager_name)" args="manager"/>
